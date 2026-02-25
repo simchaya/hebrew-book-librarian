@@ -21,7 +21,116 @@ This document captures the technical journey, pivots, and breakthroughs while bu
 
 # 🔍 The AI Strategy Evolution
 
-### Phase 1: The ISBN & Google Books Dead End ❌
+### Phase 1: Initial Setup & OCR Breakthrough (Jan 9, 2026)
+
+**The Challenge:** Get OCR working for Hebrew book covers.
+
+**Key Issues:**
+- CORS blocking requests to Cloud Function
+- Google Vision API not enabled
+- HEIC files from iPhone not loading in browser
+
+**Solutions:**
+1. Added CORS headers to Cloud Function
+2. Enabled Vision API on GCP project
+3. Implemented Canvas-based HEIC → JPEG conversion
+
+**Outcome:** ✅ Hebrew text detection working
+
+---
+
+### Phase 2: Search Accuracy Crisis (Jan 9, 2026)
+
+**The Problem:** OCR detected "יהודה עמיחי שירי אהבה" correctly, but Google Books returned the wrong book (matched author only, not title).
+
+**Root Cause:** Using only the first line of OCR text (author name) instead of full text (author + title).
+
+**The Fix:**
+```javascript
+// Before: Used first line only
+const firstLine = ocrText.split('\n')[0];
+
+// After: Use full OCR text
+const cleanedText = ocrText.replace(/\n/g, ' ').trim();
+```
+
+**Impact:** Dramatically improved book match accuracy.
+
+---
+
+### Phase 3: ISBN Extraction (Jan 9, 2026)
+
+**The Insight:** If we can extract ISBN from the book cover, we get exact matches across all sources.
+
+**Implementation:**
+- Regex patterns for ISBN-10 and ISBN-13
+- Handles various formats (with/without dashes)
+- ISBN-first search strategy for Google Books
+
+**Impact:** When ISBN is detected:
+- Google Books: Exact match via `isbn:` query
+- Simania: Direct book page link
+- Amazon: Precise product matches
+
+---
+
+### Phase 4: Multi-Source Integration (Jan 9-12, 2026)
+
+**The Realization:** No single source has comprehensive Hebrew book data.
+
+**Solution:** Query 6+ sources simultaneously:
+1. **Google Books** - Bibliographic data, descriptions
+2. **Hebrew Wikipedia** - Cultural context, significance
+3. **Simania** - Israeli reviews and discussions
+4. **Steimatzky** - Major Israeli bookstore
+5. **Tzomet Sfarim** - Second major Israeli bookstore
+6. **Amazon** - International availability
+
+**UI Design:**
+- Hebrew title (RTL) at top
+- English title from Google Books
+- Full description (no truncation)
+- Clickable source cards
+
+---
+
+### Phase 5: Smart Matching Algorithm (Jan 9, 2026)
+
+**The Problem:** Google Books API still returning irrelevant results.
+
+**The Solution:** Implemented scoring system:
+```javascript
+// Scoring logic
+titleMatch: +3 points per word
+authorMatch: +2 points per word
+hebrewLanguage: +5 bonus points
+```
+
+**Search Strategy:**
+1. Try exact phrase: `"יהודה עמיחי שירי אהבה"`
+2. Try with intitle: `intitle:יהודה עמיחי שירי אהבה`
+3. Fall back to general search
+4. Score all results, return best match
+
+---
+
+### Phase 6: Librarian Research (Jan 12, 2026)
+
+**The Pivot:** Transform from "book finder" to "librarian decision tool."
+
+**Research Output:** Compiled 16+ parameters librarians use to evaluate books:
+- Bibliographic details (title, author, ISBN, publisher)
+- Content quality (genre, plot, themes, literary value)
+- Reviews & awards
+- Physical format & durability
+- Circulation potential
+- Collection relevance
+- Budget considerations
+
+**Impact:** Positioned the tool as a professional library acquisition aid.
+
+
+### Phase 7: The ISBN & Google Books Dead End ❌
 
 **The Goal:** Use standard bibliographic IDs (ISBN) and the Google Books API to fetch data.
 
@@ -34,7 +143,7 @@ This document captures the technical journey, pivots, and breakthroughs while bu
 
 ---
 
-### Phase 2: Pivot to Native Vision Reasoning 🔄
+### Phase 8: Pivot to Native Vision Reasoning 🔄
 
 **The Realization:** Instead of treating book covers as "text containers to be extracted," I needed to treat them as **visual documents** that an AI could "read" holistically.
 
@@ -65,7 +174,7 @@ Book Cover Image → Gemini Vision → Direct Analysis → Results
 
 ---
 
-### Phase 2: The Connectivity Mystery (Heartbeat Milestones) 🛠️
+### Phase 9: The Connectivity Mystery (Heartbeat Milestones) 🛠️
 
 **The Challenge:** Frequent `404` and `400` errors made it impossible to tell if the AI was broken or if the code was wrong.
 
@@ -96,7 +205,33 @@ Book Cover Image → Gemini Vision → Direct Analysis → Results
 
 ## 🛠️ Technical Challenges & Solutions
 
-### 1. The Rate Limit War (429 Errors) ✅
+### 1. HEIC Format Issue ✅
+**Problem:** iPhone photos in HEIC format won't load in browser `<img>` tags.
+
+**Solution:**
+```javascript
+// Convert via Canvas API
+const img = new Image();
+img.onload = () => {
+  canvas.drawImage(img, 0, 0);
+  const jpeg = canvas.toDataURL('image/jpeg', 0.95);
+};
+```
+
+### 2. Empty OCR Results ❌ → ✅
+**Problem:** Cloud Function returning `{"text": "", "success": true}`.
+
+**Root Cause:** Using wrong Vision API method.
+
+**Fix:** Use `annotateImage` with `TEXT_DETECTION` feature (from working Expo project).
+
+### 3. Search Returning Wrong Books ❌ → ✅
+**Problem:** Searching with author name only.
+
+**Fix:** Use complete OCR text for search queries.
+
+
+### 4. The Rate Limit War (429 Errors) ✅
 
 **Issue:** Fetching cover images from the Google Books API while simultaneously running AI analysis triggered `429 (Too Many Requests)` errors.
 
@@ -120,7 +255,7 @@ async function fetchCoverWithRetry(url: string, retries = 3): Promise<Response> 
 
 ---
 
-### 2. OCR Typo Correction
+### 5. OCR Typo Correction
 
 **Issue:** Hebrew OCR frequently confuses similar letters like `ח` and `ה`.
 
@@ -214,189 +349,6 @@ Telling an AI **where to "look"** (Simania, NLI) drastically changes the quality
 | 0.1.5 | Jan 9, 2026 | 🖼️ **HEIC Support** - Added Canvas-based HEIC to JPEG conversion for iOS compatibility |
 | 0.1.2 | Jan 9, 2026 | ✅ **OCR Fixed** - Resolved CORS issues, enabled Google Vision API, working Hebrew text detection |
 | 0.1 | Jan 9, 2026 | 🚀 **Project Inception** - Initial Vite + React setup, Cloud Function deployment, first OCR attempts |
-
----
-
-## 📅 Detailed Development Timeline
-
-### Session 1: Initial Setup & OCR Challenges (Jan 9, 2026)
-
-**Problem Discovery:**
-- Started with React/Vite web app for Hebrew book scanning
-- OCR Cloud Function deployed but returning empty results
-- CORS issues blocking requests from localhost
-
-**Key Breakthroughs:**
-1. **CORS Configuration Fixed** - Added proper headers to Cloud Function
-2. **Vision API Enabled** - Activated Google Cloud Vision API for the project
-3. **HEIC Format Issue Discovered** - Browser can't decode HEIC files natively
-
-**Technical Solutions:**
-```javascript
-// Added HEIC → JPEG conversion via Canvas API
-const canvas = document.createElement('canvas');
-ctx.drawImage(img, 0, 0);
-const jpeg = canvas.toDataURL('image/jpeg', 0.95);
-```
-
-**Outcome:** ✅ OCR working for JPEG files, Hebrew text detection successful
-
----
-
-### Session 2: Search Accuracy & Multi-Source Integration (Jan 9, 2026)
-
-**Problem:** 
-- OCR detected text correctly (e.g., "שולמית לפיד ה ת כ ש י ט ש כתר")
-- But Google Books API returned wrong books (matched author only, not title)
-
-**Solutions Implemented:**
-
-1. **Full Text Search Strategy**
-   - Changed from using first line only → using ALL OCR text
-   - Result: Better 1:1 book matches
-
-2. **Multi-Source Architecture**
-   - Added 6+ book sources for comprehensive coverage
-   - Sources: Google Books, Wikipedia (Hebrew), Simania, Steimatzky, Tzomet Sfarim, Amazon
-
-3. **ISBN Extraction**
-   ```javascript
-   // Added automatic ISBN detection from OCR
-   function extractISBN(text: string): string | undefined {
-     const isbn13Match = cleanText.match(/(?:978|979)\d{10}/);
-     const isbn10Match = cleanText.match(/\d{10}/);
-     // Returns ISBN if found for exact book matching
-   }
-   ```
-
-4. **Improved Google Books Matching Algorithm**
-   - Exact phrase search first: `"יהודה עמיחי שירי אהבה"`
-   - Smart scoring: Title matches worth 3 points, author matches 2 points
-   - Hebrew language bonus: +5 points
-   - Multiple fallback strategies
-
-**Technical Innovations:**
-- ISBN-based direct links when available:
-  - Simania: `bookdetails.php?isbn=[ISBN]` instead of search
-  - Amazon: ISBN search for exact matches
-  - Google Books: `isbn:[NUMBER]` query
-
-**UI Improvements:**
-- Hebrew title displayed at top (RTL)
-- English title from Google Books below
-- Full book description (no truncation)
-- Green ISBN badge when detected
-- Multiple clickable source links
-
-**Outcome:** ✅ Accurate book identification, multiple purchase/info sources
-
----
-
-### Session 3: Librarian-Focused Features (Jan 12, 2026)
-
-**Goal:** Transform from "book finder" to "librarian decision tool"
-
-**Research Phase:**
-- Compiled comprehensive list of 16+ parameters librarians use to evaluate books
-- Categories: Bibliographic, Content Quality, Physical Format, Reviews, Circulation Potential, Budget, etc.
-
-**Key Parameters Identified:**
-- Literary quality and awards
-- Target audience and reading level
-- Circulation history of similar titles
-- Physical durability for library use
-- Collection gap analysis
-- Community interest and demand
-- Cost per expected use
-- Diversity and representation
-- Content appropriateness
-
-**AI Agent Prompt Engineering:**
-Created specialized research agent prompt for Hebrew books with:
-- 9 Israeli and international sources to check
-- Structured output format for librarian decision-making
-- Instructions for handling Hebrew-English translation
-- Quality checklist (7 verification steps)
-- Cultural context integration
-
-**Prompt Strategy:**
-```markdown
-Input: Hebrew book title/ISBN
-Process: 
-  1. Search Simania for reviews
-  2. Check Hebrew Wikipedia for significance
-  3. Query Israeli bookstores for availability
-  4. Search Google Books for translations
-  5. Check Amazon for international availability
-  6. Compile structured report
-Output: Comprehensive librarian report
-```
-
----
-
-### Session 4: Documentation & Dev Log (Jan 12, 2026)
-
-**Created Professional Documentation:**
-
-1. **DEVLOG.md Formatting**
-   - Converted raw notes to proper Markdown
-   - Added tables, code blocks, syntax highlighting
-   - Structured with clear phase sections
-   - Added performance metrics
-   - Included roadmap and version history
-
-2. **Key Sections:**
-   - Tech stack overview
-   - 4-phase development journey
-   - Technical challenges & solutions
-   - Architecture documentation
-   - Lessons learned
-   - Performance metrics
-
-3. **GitHub/VS Code Optimizations:**
-   - Proper header hierarchy (H1 → H3)
-   - Task lists for roadmap `- [ ]`
-   - Code blocks with language tags
-   - Tables for structured data
-   - Horizontal rules for sections
-   - Emoji for visual scanning
-
-**Timeline Integration:**
-- Added this comprehensive session-by-session breakdown
-- Documented all technical pivots and decisions
-- Captured breakthrough moments with context
-
----
-
-### Key Technical Decisions Summary
-
-| Decision | Rationale | Impact |
-|----------|-----------|--------|
-| **Switch from Tesseract to Google Vision** | Better Hebrew character recognition | +27% accuracy |
-| **HEIC → JPEG conversion** | Browser compatibility | Works on all devices |
-| **Full OCR text search** | Better book matching | More accurate results |
-| **ISBN extraction** | Exact book identification | Direct links to sources |
-| **Multi-source integration** | Comprehensive coverage | 6+ ways to find each book |
-| **Smart scoring algorithm** | Prioritize relevant results | Hebrew books ranked higher |
-| **Librarian-focused parameters** | Professional tool, not just consumer | Evaluation framework |
-
----
-
-### Lessons from This Development Session
-
-1. **HEIC is a Web Blocker** - Always convert to JPEG client-side
-2. **OCR Alone Isn't Enough** - Need smart search algorithms
-3. **Hebrew Books Need Hebrew Sources** - Google Books API has gaps
-4. **ISBN is Gold** - When available, use it for everything
-5. **Multi-Source Strategy** - No single source has all Hebrew books
-6. **Iterative Debugging** - Debug logs saved hours of troubleshooting
-7. **User Needs Drive Architecture** - Librarian needs ≠ consumer needs
-
----
-
-## 🤝 Contributing
-
-This is a technical development log. For contribution guidelines, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
